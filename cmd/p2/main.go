@@ -174,7 +174,7 @@ Config:
 Example config:
 {
   "lower_bound": 0,
-  "upper_bound": 32,
+  "upper_bound": 16,
   "use_commas": true,
   "copy_single_to_clipboard": true
 }

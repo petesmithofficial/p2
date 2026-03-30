@@ -86,16 +86,21 @@ func ClosestTo(target *big.Int) []Entry {
 }
 
 func FormatEntries(items []Entry, useCommas bool) string {
-	parts := make([]string, 0, len(items))
-	for _, item := range items {
-		parts = append(parts, FormatEntry(item, useCommas))
+	if len(items) == 0 {
+		return ""
 	}
 
-	return strings.Join(parts, ", ")
+	width := exponentWidth(items)
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		parts = append(parts, FormatEntry(item, useCommas, width))
+	}
+
+	return strings.Join(parts, "\n")
 }
 
-func FormatEntry(item Entry, useCommas bool) string {
-	return fmt.Sprintf("%d (%s)", item.Exponent, FormatUint(item.Value, useCommas))
+func FormatEntry(item Entry, useCommas bool, exponentWidth int) string {
+	return fmt.Sprintf("2^%-*d = %s", exponentWidth, item.Exponent, FormatUint(item.Value, useCommas))
 }
 
 func FormatUint(value uint64, useCommas bool) string {
@@ -109,6 +114,18 @@ func FormatUint(value uint64, useCommas bool) string {
 
 func RawUint(value uint64) string {
 	return strconv.FormatUint(value, 10)
+}
+
+func exponentWidth(items []Entry) int {
+	width := 1
+	for _, item := range items {
+		length := len(strconv.FormatUint(uint64(item.Exponent), 10))
+		if length > width {
+			width = length
+		}
+	}
+
+	return width
 }
 
 func formatUintWithCommas(digits string) string {

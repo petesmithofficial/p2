@@ -19,7 +19,7 @@ func TestRunNoArgs(t *testing.T) {
 		t.Fatalf("run() exit code = %d, want 0", exitCode)
 	}
 
-	want := powers.FormatEntries(powers.All(), true) + "\n"
+	want := powers.FormatEntries(powers.Between(0, 16), true) + "\n"
 	if stdout.String() != want {
 		t.Fatalf("stdout = %q, want %q", stdout.String(), want)
 	}
@@ -46,8 +46,8 @@ func TestRunExponentArg(t *testing.T) {
 		t.Fatalf("run() exit code = %d, want 0", exitCode)
 	}
 
-	if stdout.String() != "5 (32)\n" {
-		t.Fatalf("stdout = %q, want %q", stdout.String(), "5 (32)\n")
+	if stdout.String() != "2^5 = 32\n" {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), "2^5 = 32\n")
 	}
 
 	if stderr.Len() != 0 {
@@ -79,8 +79,8 @@ func TestRunClosestArg(t *testing.T) {
 		t.Fatalf("run() exit code = %d, want 0", exitCode)
 	}
 
-	if stdout.String() != "15 (32768)\n" {
-		t.Fatalf("stdout = %q, want %q", stdout.String(), "15 (32768)\n")
+	if stdout.String() != "2^15 = 32768\n" {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), "2^15 = 32768\n")
 	}
 
 	if stderr.Len() != 0 {
@@ -109,8 +109,8 @@ func TestRunTieArg(t *testing.T) {
 		t.Fatalf("run() exit code = %d, want 0", exitCode)
 	}
 
-	if stdout.String() != "5 (32), 6 (64)\n" {
-		t.Fatalf("stdout = %q, want %q", stdout.String(), "5 (32), 6 (64)\n")
+	if stdout.String() != "2^5 = 32\n2^6 = 64\n" {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), "2^5 = 32\n2^6 = 64\n")
 	}
 
 	if stderr.Len() != 0 {
@@ -135,8 +135,8 @@ func TestRunNoArgsRespectsBounds(t *testing.T) {
 		t.Fatalf("run() exit code = %d, want 0", exitCode)
 	}
 
-	if stdout.String() != "5 (32), 6 (64), 7 (128), 8 (256)\n" {
-		t.Fatalf("stdout = %q, want %q", stdout.String(), "5 (32), 6 (64), 7 (128), 8 (256)\n")
+	if stdout.String() != "2^5 = 32\n2^6 = 64\n2^7 = 128\n2^8 = 256\n" {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), "2^5 = 32\n2^6 = 64\n2^7 = 128\n2^8 = 256\n")
 	}
 
 	if stderr.Len() != 0 {
@@ -307,6 +307,14 @@ func TestRunReset(t *testing.T) {
 
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestDefaultConfigUpperBound(t *testing.T) {
+	t.Parallel()
+
+	if got := config.Default().UpperBound; got != 16 {
+		t.Fatalf("config.Default().UpperBound = %d, want 16", got)
 	}
 }
 

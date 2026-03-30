@@ -83,6 +83,53 @@ func TestFormatUint(t *testing.T) {
 	}
 }
 
+func TestFormatEntries(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name      string
+		items     []Entry
+		useCommas bool
+		want      string
+	}{
+		{
+			name: "single",
+			items: []Entry{
+				{Exponent: 5, Value: 32},
+			},
+			useCommas: true,
+			want:      "2^5 = 32",
+		},
+		{
+			name: "aligned list",
+			items: []Entry{
+				{Exponent: 0, Value: 1},
+				{Exponent: 10, Value: 1024},
+				{Exponent: 16, Value: 65536},
+			},
+			useCommas: true,
+			want:      "2^0  = 1\n2^10 = 1,024\n2^16 = 65,536",
+		},
+		{
+			name: "no commas",
+			items: []Entry{
+				{Exponent: 15, Value: 32768},
+			},
+			useCommas: false,
+			want:      "2^15 = 32768",
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			if got := FormatEntries(tc.items, tc.useCommas); got != tc.want {
+				t.Fatalf("FormatEntries() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestBetween(t *testing.T) {
 	t.Parallel()
 

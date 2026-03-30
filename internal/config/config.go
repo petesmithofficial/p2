@@ -24,7 +24,7 @@ type Config struct {
 func Default() Config {
 	return Config{
 		LowerBound:            0,
-		UpperBound:            int(powers.MaxExponent),
+		UpperBound:            16,
 		UseCommas:             true,
 		CopySingleToClipboard: true,
 	}
