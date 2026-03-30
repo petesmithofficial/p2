@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"runtime"
 )
@@ -16,7 +17,7 @@ type command struct {
 }
 
 func Copy(text string) error {
-	cmd, err := commandFor(runtime.GOOS, exec.LookPath)
+	cmd, err := commandFor(runtime.GOOS, exec.LookPath, os.Getenv)
 	if err != nil {
 		return err
 	}
@@ -50,7 +51,7 @@ func Copy(text string) error {
 	return nil
 }
 
-func commandFor(goos string, lookPath func(string) (string, error)) (command, error) {
+func commandFor(goos string, lookPath func(string) (string, error), getenv func(string) string) (command, error) {
 	switch goos {
 	case "darwin":
 		if err := requireCommand("pbcopy", lookPath); err != nil {
@@ -63,8 +64,10 @@ func commandFor(goos string, lookPath func(string) (string, error)) (command, er
 		}
 		return command{name: "clip"}, nil
 	default:
-		if err := requireCommand("wl-copy", lookPath); err == nil {
-			return command{name: "wl-copy"}, nil
+		if getenv("WAYLAND_DISPLAY") != "" {
+			if err := requireCommand("wl-copy", lookPath); err == nil {
+				return command{name: "wl-copy"}, nil
+			}
 		}
 		if err := requireCommand("xclip", lookPath); err == nil {
 			return command{name: "xclip", args: []string{"-selection", "clipboard"}}, nil

@@ -94,7 +94,7 @@ func runWithDeps(args []string, stdin io.Reader, stdout io.Writer, stderr io.Wri
 
 	_, _ = fmt.Fprintln(stdout, powers.FormatEntries(entries, cfg.UseCommas))
 	if cfg.CopySingleToClipboard && len(entries) == 1 {
-		if err := deps.copy(powers.RawUint(entries[0].Value)); err != nil {
+		if err := deps.copy(powers.RawUint(entries[0].Value)); err != nil && !errors.Is(err, clipboard.ErrUnavailable) {
 			_, _ = fmt.Fprintf(stderr, "warning: failed to copy to clipboard: %v\n", err)
 		}
 	}

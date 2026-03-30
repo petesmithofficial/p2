@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"p2/internal/clipboard"
 	"p2/internal/config"
 	"p2/internal/powers"
 )
@@ -228,7 +229,7 @@ func TestRunClipboardWarning(t *testing.T) {
 
 	deps := testDeps(config.Default())
 	deps.copy = func(string) error {
-		return errors.New("clipboard unavailable")
+		return errors.New("command crashed")
 	}
 
 	exitCode := runWithDeps([]string{"5"}, bytes.NewBuffer(nil), &stdout, &stderr, deps)
@@ -236,8 +237,27 @@ func TestRunClipboardWarning(t *testing.T) {
 		t.Fatalf("run() exit code = %d, want 0", exitCode)
 	}
 
-	if !bytes.Contains(stderr.Bytes(), []byte("warning: failed to copy to clipboard: clipboard unavailable")) {
+	if !bytes.Contains(stderr.Bytes(), []byte("warning: failed to copy to clipboard: command crashed")) {
 		t.Fatalf("stderr = %q, want warning", stderr.String())
+	}
+}
+
+func TestRunClipboardUnavailableSilent(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	deps := testDeps(config.Default())
+	deps.copy = func(string) error {
+		return clipboard.ErrUnavailable
+	}
+
+	exitCode := runWithDeps([]string{"5"}, bytes.NewBuffer(nil), &stdout, &stderr, deps)
+	if exitCode != 0 {
+		t.Fatalf("run() exit code = %d, want 0", exitCode)
+	}
+
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty (no warning for unavailable clipboard)", stderr.String())
 	}
 }
 
