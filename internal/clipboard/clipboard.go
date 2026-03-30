@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 )
 
 var ErrUnavailable = errors.New("clipboard tool not available")
@@ -16,11 +18,34 @@ type command struct {
 }
 
 func Copy(text string) error {
-	cmd, err := commandFor(runtime.GOOS, exec.LookPath)
-	if err != nil {
-		return err
+	return copyWith(runtime.GOOS, text, os.Getenv, exec.LookPath, runCommand)
+}
+
+func copyWith(
+	goos string,
+	text string,
+	getenv func(string) string,
+	lookPath func(string) (string, error),
+	run func(command, string) error,
+) error {
+	commands := commandsFor(goos, getenv, lookPath)
+	if len(commands) == 0 {
+		return ErrUnavailable
 	}
 
+	var failures []string
+	for _, cmd := range commands {
+		if err := run(cmd, text); err == nil {
+			return nil
+		} else {
+			failures = append(failures, fmt.Sprintf("%s: %v", cmd.name, err))
+		}
+	}
+
+	return fmt.Errorf("clipboard command failed: %s", strings.Join(failures, "; "))
+}
+
+func runCommand(cmd command, text string) error {
 	execCmd := exec.Command(cmd.name, cmd.args...)
 	stdin, err := execCmd.StdinPipe()
 	if err != nil {
@@ -44,36 +69,46 @@ func Copy(text string) error {
 	}
 
 	if err := execCmd.Wait(); err != nil {
-		return fmt.Errorf("clipboard command failed: %w", err)
+		return err
 	}
 
 	return nil
 }
 
-func commandFor(goos string, lookPath func(string) (string, error)) (command, error) {
+func commandsFor(goos string, getenv func(string) string, lookPath func(string) (string, error)) []command {
+	var commands []command
+	seen := map[string]struct{}{}
+
+	addIfAvailable := func(cmd command) {
+		if _, ok := seen[cmd.name]; ok {
+			return
+		}
+		if err := requireCommand(cmd.name, lookPath); err != nil {
+			return
+		}
+		seen[cmd.name] = struct{}{}
+		commands = append(commands, cmd)
+	}
+
 	switch goos {
 	case "darwin":
-		if err := requireCommand("pbcopy", lookPath); err != nil {
-			return command{}, err
-		}
-		return command{name: "pbcopy"}, nil
+		addIfAvailable(command{name: "pbcopy"})
 	case "windows":
-		if err := requireCommand("clip", lookPath); err != nil {
-			return command{}, err
-		}
-		return command{name: "clip"}, nil
+		addIfAvailable(command{name: "clip"})
 	default:
-		if err := requireCommand("wl-copy", lookPath); err == nil {
-			return command{name: "wl-copy"}, nil
+		if getenv("WAYLAND_DISPLAY") != "" {
+			addIfAvailable(command{name: "wl-copy"})
 		}
-		if err := requireCommand("xclip", lookPath); err == nil {
-			return command{name: "xclip", args: []string{"-selection", "clipboard"}}, nil
+		if getenv("DISPLAY") != "" {
+			addIfAvailable(command{name: "xclip", args: []string{"-selection", "clipboard"}})
+			addIfAvailable(command{name: "xsel", args: []string{"--clipboard", "--input"}})
 		}
-		if err := requireCommand("xsel", lookPath); err == nil {
-			return command{name: "xsel", args: []string{"--clipboard", "--input"}}, nil
-		}
-		return command{}, ErrUnavailable
+		addIfAvailable(command{name: "wl-copy"})
+		addIfAvailable(command{name: "xclip", args: []string{"-selection", "clipboard"}})
+		addIfAvailable(command{name: "xsel", args: []string{"--clipboard", "--input"}})
 	}
+
+	return commands
 }
 
 func requireCommand(name string, lookPath func(string) (string, error)) error {
