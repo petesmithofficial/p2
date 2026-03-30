@@ -67,6 +67,20 @@ func runWithDeps(args []string, stdin io.Reader, stdout io.Writer, stderr io.Wri
 		return 0
 	}
 
+	if entries, isRange, err := parseRangeArg(args[0]); isRange {
+		if err != nil {
+			return usageError(stderr, err.Error(), deps.configPath())
+		}
+
+		_, _ = fmt.Fprintln(stdout, powers.FormatEntries(entries, cfg.UseCommas))
+		if cfg.CopySingleToClipboard && len(entries) == 1 {
+			if err := deps.copy(powers.RawUint(entries[0].Value)); err != nil {
+				_, _ = fmt.Fprintf(stderr, "warning: failed to copy to clipboard: %v\n", err)
+			}
+		}
+		return 0
+	}
+
 	input, ok := parseIntegerArg(args[0])
 	if !ok {
 		if looksLikeFlag(args[0]) {
@@ -151,13 +165,18 @@ func configError(stderr io.Writer, err error) int {
 }
 
 func helpText(configPath string) string {
-	return fmt.Sprintf(`usage: p2 [integer]
+	return fmt.Sprintf(`usage: p2 [integer|range]
 
 Print powers of 2 from 2^0 through 2^32.
 
 With one integer argument:
   0..32  treat the value as an exponent
   >32    treat the value as a target and print the closest power of 2
+
+With one range argument:
+  A..B   print exponents from A through B
+  A-B    same as A..B
+  16..5  normalizes to 5 through 16
 
 Options:
   -h, --help  show this help text
@@ -282,6 +301,65 @@ func readPromptLine(reader *bufio.Reader) (string, error) {
 	return strings.TrimSpace(line), err
 }
 
+func parseRangeArg(raw string) ([]powers.Entry, bool, error) {
+	const (
+		noSeparator = iota
+		dotSeparator
+		hyphenSeparator
+	)
+
+	separatorType := noSeparator
+	switch {
+	case strings.Contains(raw, ".."):
+		separatorType = dotSeparator
+	case strings.Count(raw, "-") == 1 && strings.Index(raw, "-") > 0:
+		separatorType = hyphenSeparator
+	default:
+		return nil, false, nil
+	}
+
+	var startRaw string
+	var endRaw string
+
+	switch separatorType {
+	case dotSeparator:
+		if strings.Count(raw, "..") != 1 {
+			return nil, true, fmt.Errorf("invalid range %q", raw)
+		}
+		if strings.Contains(raw, "-") {
+			return nil, true, fmt.Errorf("invalid range %q", raw)
+		}
+
+		startRaw, endRaw, _ = strings.Cut(raw, "..")
+	case hyphenSeparator:
+		if strings.Contains(raw, ".") || strings.Count(raw, "-") != 1 {
+			return nil, true, fmt.Errorf("invalid range %q", raw)
+		}
+
+		startRaw, endRaw, _ = strings.Cut(raw, "-")
+	}
+
+	start, err := parseRangeEndpoint(startRaw)
+	if err != nil {
+		return nil, true, fmt.Errorf("invalid range %q", raw)
+	}
+
+	end, err := parseRangeEndpoint(endRaw)
+	if err != nil {
+		return nil, true, fmt.Errorf("invalid range %q", raw)
+	}
+
+	if start > int(powers.MaxExponent) || end > int(powers.MaxExponent) {
+		return nil, true, fmt.Errorf("range exponents must be between 0 and %d", powers.MaxExponent)
+	}
+
+	if start > end {
+		start, end = end, start
+	}
+
+	return powers.Between(start, end), true, nil
+}
+
 func parseIntegerArg(raw string) (*big.Int, bool) {
 	normalized, ok := normalizeIntegerArg(raw)
 	if !ok {
@@ -294,6 +372,19 @@ func parseIntegerArg(raw string) (*big.Int, bool) {
 	}
 
 	return input, true
+}
+
+func parseRangeEndpoint(raw string) (int, error) {
+	if raw == "" || !isDigits(raw) {
+		return 0, fmt.Errorf("invalid endpoint")
+	}
+
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, err
+	}
+
+	return value, nil
 }
 
 func normalizeIntegerArg(raw string) (string, bool) {

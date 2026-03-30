@@ -121,6 +121,126 @@ func TestRunClosestArgAcceptsCommaSeparatedInput(t *testing.T) {
 	}
 }
 
+func TestRunRangeArg(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	copied := false
+	deps := testDeps(config.Default())
+	deps.copy = func(string) error {
+		copied = true
+		return nil
+	}
+
+	exitCode := runWithDeps([]string{"0..4"}, bytes.NewBuffer(nil), &stdout, &stderr, deps)
+	if exitCode != 0 {
+		t.Fatalf("run() exit code = %d, want 0", exitCode)
+	}
+
+	want := "2^0 = 1\n2^1 = 2\n2^2 = 4\n2^3 = 8\n2^4 = 16\n"
+	if stdout.String() != want {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+	}
+
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+
+	if copied {
+		t.Fatal("copy was called for multi-result range, want no copy")
+	}
+}
+
+func TestRunRangeAliasArg(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runWithDeps([]string{"1-3"}, bytes.NewBuffer(nil), &stdout, &stderr, testDeps(config.Default()))
+	if exitCode != 0 {
+		t.Fatalf("run() exit code = %d, want 0", exitCode)
+	}
+
+	want := "2^1 = 2\n2^2 = 4\n2^3 = 8\n"
+	if stdout.String() != want {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+	}
+
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunDescendingRangeArg(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := runWithDeps([]string{"16..5"}, bytes.NewBuffer(nil), &stdout, &stderr, testDeps(config.Default()))
+	if exitCode != 0 {
+		t.Fatalf("run() exit code = %d, want 0", exitCode)
+	}
+
+	want := "2^5  = 32\n2^6  = 64\n2^7  = 128\n2^8  = 256\n2^9  = 512\n2^10 = 1,024\n2^11 = 2,048\n2^12 = 4,096\n2^13 = 8,192\n2^14 = 16,384\n2^15 = 32,768\n2^16 = 65,536\n"
+	if stdout.String() != want {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+	}
+
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunSingleEntryRangeArgCopies(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	var copied string
+	deps := testDeps(config.Default())
+	deps.copy = func(value string) error {
+		copied = value
+		return nil
+	}
+
+	exitCode := runWithDeps([]string{"5..5"}, bytes.NewBuffer(nil), &stdout, &stderr, deps)
+	if exitCode != 0 {
+		t.Fatalf("run() exit code = %d, want 0", exitCode)
+	}
+
+	if stdout.String() != "2^5 = 32\n" {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), "2^5 = 32\n")
+	}
+
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+
+	if copied != "32" {
+		t.Fatalf("copied value = %q, want %q", copied, "32")
+	}
+}
+
+func TestRunRangeIgnoresConfiguredBounds(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	cfg := config.Default()
+	cfg.LowerBound = 10
+	cfg.UpperBound = 12
+
+	exitCode := runWithDeps([]string{"0..2"}, bytes.NewBuffer(nil), &stdout, &stderr, testDeps(cfg))
+	if exitCode != 0 {
+		t.Fatalf("run() exit code = %d, want 0", exitCode)
+	}
+
+	want := "2^0 = 1\n2^1 = 2\n2^2 = 4\n"
+	if stdout.String() != want {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+	}
+
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
 func TestRunTieArg(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -182,7 +302,7 @@ func TestRunHelp(t *testing.T) {
 		t.Fatalf("run() exit code = %d, want 0", exitCode)
 	}
 
-	if !bytes.Contains(stdout.Bytes(), []byte("usage: p2 [integer]")) {
+	if !bytes.Contains(stdout.Bytes(), []byte("usage: p2 [integer|range]")) {
 		t.Fatalf("stdout = %q, want help text", stdout.String())
 	}
 
@@ -192,6 +312,10 @@ func TestRunHelp(t *testing.T) {
 
 	if !bytes.Contains(stdout.Bytes(), []byte("--config")) {
 		t.Fatalf("stdout = %q, want config option in help text", stdout.String())
+	}
+
+	if !bytes.Contains(stdout.Bytes(), []byte("A..B   print exponents from A through B")) {
+		t.Fatalf("stdout = %q, want range help text", stdout.String())
 	}
 
 	if stderr.Len() != 0 {
@@ -386,6 +510,58 @@ func TestParseIntegerArg(t *testing.T) {
 	}
 }
 
+func TestParseRangeArg(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name      string
+		input     string
+		want      string
+		isRange   bool
+		wantError bool
+	}{
+		{name: "dot range", input: "0..2", want: "2^0 = 1\n2^1 = 2\n2^2 = 4", isRange: true},
+		{name: "hyphen range", input: "1-3", want: "2^1 = 2\n2^2 = 4\n2^3 = 8", isRange: true},
+		{name: "descending range", input: "16..14", want: "2^14 = 16,384\n2^15 = 32,768\n2^16 = 65,536", isRange: true},
+		{name: "plain integer", input: "30000", isRange: false},
+		{name: "comma integer", input: "30,000", isRange: false},
+		{name: "missing start", input: "..16", isRange: true, wantError: true},
+		{name: "missing end", input: "5-", isRange: true, wantError: true},
+		{name: "mixed separators", input: "1..2-3", isRange: true, wantError: true},
+		{name: "too large", input: "33..40", isRange: true, wantError: true},
+		{name: "target style", input: "30000..40000", isRange: true, wantError: true},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got, isRange, err := parseRangeArg(tc.input)
+			if isRange != tc.isRange {
+				t.Fatalf("parseRangeArg(%q) isRange = %v, want %v", tc.input, isRange, tc.isRange)
+			}
+
+			if tc.wantError {
+				if err == nil {
+					t.Fatalf("parseRangeArg(%q) error = nil, want error", tc.input)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("parseRangeArg(%q) error = %v, want nil", tc.input, err)
+			}
+
+			if !tc.isRange {
+				return
+			}
+
+			if formatted := powers.FormatEntries(got, true); formatted != tc.want {
+				t.Fatalf("parseRangeArg(%q) = %q, want %q", tc.input, formatted, tc.want)
+			}
+		})
+	}
+}
+
 func TestRunInvalidInput(t *testing.T) {
 	t.Parallel()
 
@@ -399,6 +575,11 @@ func TestRunInvalidInput(t *testing.T) {
 		{name: "nonnumeric", args: []string{"hello"}},
 		{name: "unknown flag", args: []string{"--nope"}},
 		{name: "bad comma grouping", args: []string{"3,00"}},
+		{name: "bad range missing start", args: []string{"..16"}},
+		{name: "bad range missing end", args: []string{"5-"}},
+		{name: "bad range mixed separators", args: []string{"1..2-3"}},
+		{name: "bad range too large", args: []string{"33..40"}},
+		{name: "bad range target style", args: []string{"30000..40000"}},
 		{name: "extra args", args: []string{"1", "2"}},
 	}
 
