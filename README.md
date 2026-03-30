@@ -9,6 +9,8 @@
 
 - `p2` prints the default list from `2^0` to `2^16`
 - `p2 5` prints `2^5 = 32`
+- `p2 0..8` prints exponents `0` through `8`
+- `p2 1-16` does the same with a shorter range alias
 - `p2 30000` finds the closest supported power of 2 and prints `2^15 = 32,768`
 - `p2 30,000` works too
 - Exact midpoint ties return both matches on separate lines, for example `p2 48` prints `2^5 = 32` and `2^6 = 64`
@@ -44,6 +46,8 @@ go build ./cmd/p2
 ```sh
 p2
 p2 5
+p2 0..8
+p2 1-16
 p2 30000
 p2 48
 p2 --help
@@ -73,6 +77,10 @@ Example:
 Notes:
 
 - `lower_bound` and `upper_bound` affect bare `p2` only
+- explicit ranges like `p2 0..32` and `p2 16-5` ignore config bounds
+- descending ranges normalize to ascending output
+- ranges are exponent-only input; nearest-by-value lookup remains single-number-only
+- comma-separated lists such as `p2 0,1,5,32` are not supported
 - fresh installs default to `upper_bound: 16`, even when no config file exists yet
 - `use_commas` changes display formatting only
 - `copy_single_to_clipboard` defaults to `true`
